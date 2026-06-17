@@ -21,7 +21,7 @@ public final class CsvLoader {
         for (int r = 1; r < lines.size() && sampled < SAMPLE_ROWS; r++, sampled++) {
             String[] cells = split(lines.get(r));
             for (int c = 0; c < headers.length && c < cells.length; c++) {
-                if (cells[c] == null || cells[c].isBlank()) continue;   // ← add this line
+                if (cells[c] == null || cells[c].isBlank()) continue;      // ← add this line
                 types[c] = widen(types[c], DataType.infer(cells[c]));
             }
         }

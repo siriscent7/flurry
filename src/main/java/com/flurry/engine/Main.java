@@ -1,9 +1,13 @@
 package com.flurry.engine;
 
+import com.flurry.engine.execution.ExecutionEngine;
+import com.flurry.engine.execution.Row;
 import com.flurry.engine.parser.Lexer;
 import com.flurry.engine.parser.Parser;
 import com.flurry.engine.parser.Token;
 import com.flurry.engine.parser.ast.SelectStatement;
+import com.flurry.engine.plan.LogicalPlan;
+import com.flurry.engine.plan.LogicalPlanner;
 import com.flurry.engine.storage.Catalog;
 import com.flurry.engine.storage.ColumnStats;
 import com.flurry.engine.storage.CsvLoader;
@@ -25,11 +29,17 @@ public class Main {
             case "parse" -> {
                 String sql = args.length >= 2 ? args[1] : defaultSql();
                 System.out.println("SQL: " + sql + "\n--- AST ---");
-                SelectStatement stmt = Parser.parse(sql);
-                System.out.println(stmt);
+                System.out.println(Parser.parse(sql));
+            }
+            case "query" -> {
+                // flurry query <table> <csv> "<sql>"
+                if (args.length < 4) {
+                    System.out.println("Usage: flurry query <table> <csv> \"<sql>\"");
+                    return;
+                }
+                runQuery(args[1], Path.of(args[2]), args[3]);
             }
             default -> {
-                // CSV demo: flurry <tableName> <csvPath>
                 if (args.length < 2) { usage(); return; }
                 Catalog catalog = new Catalog();
                 Table table = CsvLoader.load(args[0], Path.of(args[1]));
@@ -43,6 +53,22 @@ public class Main {
         }
     }
 
+    private static void runQuery(String tableName, Path csv, String sql) throws Exception {
+        Catalog catalog = new Catalog();
+        catalog.register(CsvLoader.load(tableName, csv));
+
+        SelectStatement stmt = Parser.parse(sql);
+        LogicalPlan plan = new LogicalPlanner(catalog).plan(stmt);
+
+        System.out.println("SQL:  " + sql);
+        System.out.println("\n--- Logical Plan ---");
+        System.out.println(plan);
+
+        List<Row> rows = new ExecutionEngine(catalog).execute(plan);
+        System.out.println("\n--- Results (" + rows.size() + " rows) ---");
+        for (Row r : rows) System.out.println(r);
+    }
+
     private static String defaultSql() {
         return "SELECT name, age FROM users WHERE age >= 30 AND city = 'San Jose'";
     }
@@ -50,9 +76,10 @@ public class Main {
     private static void usage() {
         System.out.println("""
             Usage:
-              flurry lex   "<sql>"            tokenize SQL
-              flurry parse "<sql>"            parse SQL into an AST
-              flurry <table> <csv>            load a CSV and print column stats
+              flurry lex   "<sql>"                 tokenize SQL
+              flurry parse "<sql>"                 parse SQL into an AST
+              flurry query <table> <csv> "<sql>"   run a SQL query against a CSV
+              flurry <table> <csv>                 load a CSV and print column stats
             """);
     }
 }

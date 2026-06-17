@@ -8,7 +8,7 @@ import java.util.List;
 
 /**
  * Translates a LogicalPlan into a tree of physical Operators and executes it,
- * collecting all result rows. (Phase 5 will parallelize this.)
+ * collecting all result rows.
  */
 public final class ExecutionEngine {
 
@@ -41,6 +41,12 @@ public final class ExecutionEngine {
                 new FilterOperator(f.predicate(), build(f.input()));
             case LogicalPlan.Project p ->
                 new ProjectOperator(p.items(), build(p.input()));
+            case LogicalPlan.Aggregate a ->
+                new AggregateOperator(a.groupBy(), a.items(), build(a.input()));
+            case LogicalPlan.SortLimit s ->
+                new SortLimitOperator(s.orderBy(), s.limit(), build(s.input()));
+            case LogicalPlan.Join j ->
+                new HashJoinOperator(build(j.left()), build(j.right()), j.leftKey(), j.rightKey());
         };
     }
 }

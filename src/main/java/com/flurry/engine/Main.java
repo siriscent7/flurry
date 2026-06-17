@@ -39,6 +39,19 @@ public class Main {
                 }
                 runQuery(args[1], Path.of(args[2]), args[3]);
             }
+            case "query2" -> {
+                // flurry query2 <t1> <csv1> <t2> <csv2> "<sql>"
+                if (args.length < 6) {
+                    System.out.println("Usage: flurry query2 <t1> <csv1> <t2> <csv2> \"<sql>\"");
+                    return;
+                }
+                runQuery2(args[1], Path.of(args[2]), args[3], Path.of(args[4]), args[5]);
+            }
+            case "gen" -> {
+                // flurry gen <rows> <outPath>
+                int rows = Integer.parseInt(args[1]);
+                com.flurry.engine.util.DataGen.generate(rows, java.nio.file.Path.of(args[2]));
+            }
             default -> {
                 if (args.length < 2) { usage(); return; }
                 Catalog catalog = new Catalog();
@@ -56,7 +69,18 @@ public class Main {
     private static void runQuery(String tableName, Path csv, String sql) throws Exception {
         Catalog catalog = new Catalog();
         catalog.register(CsvLoader.load(tableName, csv));
+        runAndPrint(catalog, sql);
+    }
 
+    private static void runQuery2(String t1, Path csv1, String t2, Path csv2, String sql)
+            throws Exception {
+        Catalog catalog = new Catalog();
+        catalog.register(CsvLoader.load(t1, csv1));
+        catalog.register(CsvLoader.load(t2, csv2));
+        runAndPrint(catalog, sql);
+    }
+
+    private static void runAndPrint(Catalog catalog, String sql) {
         SelectStatement stmt = Parser.parse(sql);
         LogicalPlan plan = new LogicalPlanner(catalog).plan(stmt);
 
@@ -76,10 +100,12 @@ public class Main {
     private static void usage() {
         System.out.println("""
             Usage:
-              flurry lex   "<sql>"                 tokenize SQL
-              flurry parse "<sql>"                 parse SQL into an AST
-              flurry query <table> <csv> "<sql>"   run a SQL query against a CSV
-              flurry <table> <csv>                 load a CSV and print column stats
+              flurry lex   "<sql>"                          tokenize SQL
+              flurry parse "<sql>"                          parse SQL into an AST
+              flurry query  <table> <csv> "<sql>"           run a query against one CSV
+              flurry query2 <t1> <csv1> <t2> <csv2> "<sql>" run a join query across two CSVs
+              flurry gen <rows> <out>                       generate a benchmark CSV
+              flurry <table> <csv>                          load a CSV and print column stats
             """);
     }
 }

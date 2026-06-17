@@ -9,20 +9,8 @@ import java.util.Optional;
 /**
  * Recursive-descent parser.
  *
- * Grammar (simplified):
- *   query      := SELECT selectList FROM IDENTIFIER (WHERE expr)?
- *   selectList := STAR | selectItem (COMMA selectItem)*
- *   selectItem := expr (AS? IDENTIFIER)?
- *
- *   expr       := orExpr
- *   orExpr     := andExpr (OR andExpr)*
- *   andExpr    := notExpr (AND notExpr)*
- *   notExpr    := NOT notExpr | comparison
- *   comparison := additive ((= | != | < | <= | > | >=) additive)?
- *   additive   := multiplicative ((+ | -) multiplicative)*
- *   multiplic. := unary ((* | /) unary)*
- *   unary      := - unary | primary
- *   primary    := literal | columnRef | ( expr )
+ * query := SELECT selectList FROM IDENTIFIER (WHERE expr)?
+ *          (GROUP BY expr (, expr)*)? (ORDER BY orderKey (, orderKey)*)? (LIMIT INT)?
  */
 public final class Parser {
 
@@ -37,18 +25,67 @@ public final class Parser {
         return new Parser(new Lexer(sql).tokenize()).parseQuery();
     }
 
+    private Expr.ColumnRef parseColumnRef() {
+        String first = expect(TokenType.IDENTIFIER).lexeme();
+        if (match(TokenType.DOT)) {
+            String col = expect(TokenType.IDENTIFIER).lexeme();
+            return new Expr.ColumnRef(first, col);
+        }
+        return new Expr.ColumnRef(first);
+    }
+
     public SelectStatement parseQuery() {
         expect(TokenType.SELECT);
         List<SelectStatement.SelectItem> items = parseSelectList();
         expect(TokenType.FROM);
         String table = expect(TokenType.IDENTIFIER).lexeme();
 
+        // optional JOIN ... ON a.x = b.y
+        Optional<SelectStatement.JoinClause> join = Optional.empty();
+        if (match(TokenType.JOIN)) {
+            String rightTable = expect(TokenType.IDENTIFIER).lexeme();
+            expect(TokenType.ON);
+            Expr.ColumnRef leftKey = parseColumnRef();
+            expect(TokenType.EQ);
+            Expr.ColumnRef rightKey = parseColumnRef();
+            join = Optional.of(new SelectStatement.JoinClause(rightTable, leftKey, rightKey));
+        }
+
         Optional<Expr> where = Optional.empty();
         if (match(TokenType.WHERE)) {
             where = Optional.of(parseExpr());
         }
+
+        List<Expr> groupBy = new ArrayList<>();
+        if (match(TokenType.GROUP)) {
+            expect(TokenType.BY);
+            groupBy.add(parseExpr());
+            while (match(TokenType.COMMA)) groupBy.add(parseExpr());
+        }
+
+        List<SelectStatement.OrderKey> orderBy = new ArrayList<>();
+        if (match(TokenType.ORDER)) {
+            expect(TokenType.BY);
+            orderBy.add(parseOrderKey());
+            while (match(TokenType.COMMA)) orderBy.add(parseOrderKey());
+        }
+
+        Optional<Integer> limit = Optional.empty();
+        if (match(TokenType.LIMIT)) {
+            Token n = expect(TokenType.INTEGER_LITERAL);
+            limit = Optional.of(Integer.parseInt(n.lexeme()));
+        }
+
         expect(TokenType.EOF);
-        return new SelectStatement(items, table, where);
+        return new SelectStatement(items, table, join, where, groupBy, orderBy, limit);
+    }
+
+    private SelectStatement.OrderKey parseOrderKey() {
+        Expr e = parseExpr();
+        boolean desc = false;
+        if (match(TokenType.DESC)) desc = true;
+        else match(TokenType.ASC); // optional ASC
+        return new SelectStatement.OrderKey(e, desc);
     }
 
     // --- SELECT list ---
@@ -178,6 +215,23 @@ public final class Parser {
             }
             case IDENTIFIER -> {
                 String first = advance().lexeme();
+
+                // function call?  e.g. COUNT(*), SUM(age)
+                if (check(TokenType.LPAREN)) {
+                    advance(); // consume (
+                    if (match(TokenType.STAR)) {
+                        expect(TokenType.RPAREN);
+                        return new Expr.FunctionCall(first.toUpperCase(), List.of(), true);
+                    }
+                    List<Expr> fnArgs = new ArrayList<>();
+                    if (!check(TokenType.RPAREN)) {
+                        fnArgs.add(parseExpr());
+                        while (match(TokenType.COMMA)) fnArgs.add(parseExpr());
+                    }
+                    expect(TokenType.RPAREN);
+                    return new Expr.FunctionCall(first.toUpperCase(), fnArgs, false);
+                }
+
                 if (match(TokenType.DOT)) {
                     String col = expect(TokenType.IDENTIFIER).lexeme();
                     return new Expr.ColumnRef(first, col);   // table.column

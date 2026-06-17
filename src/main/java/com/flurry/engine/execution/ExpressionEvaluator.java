@@ -2,9 +2,8 @@ package com.flurry.engine.execution;
 
 import com.flurry.engine.parser.ast.BinaryOp;
 import com.flurry.engine.parser.ast.Expr;
-import com.flurry.engine.parser.ast.UnaryOp;
 
-/** Evaluates an Expr against a single Row. */
+/** Evaluates an expression tree against a single Row. */
 public final class ExpressionEvaluator {
 
     public static Object eval(Expr expr, Row row) {
@@ -13,21 +12,20 @@ public final class ExpressionEvaluator {
             case Expr.ColumnRef ref -> row.get(ref.column());
             case Expr.UnaryExpr u   -> evalUnary(u, row);
             case Expr.BinaryExpr b  -> evalBinary(b, row);
+            case Expr.FunctionCall fc -> throw new IllegalStateException(
+                    "Aggregate function " + fc.name() + " cannot be evaluated per-row");
         };
     }
 
-    /** Convenience: evaluate a predicate to a boolean. */
     public static boolean evalPredicate(Expr expr, Row row) {
         Object v = eval(expr, row);
-        if (v == null) return false;               // NULL predicate -> not matched
-        if (v instanceof Boolean b) return b;
-        throw new IllegalStateException("Predicate did not evaluate to boolean: " + v);
+        return Boolean.TRUE.equals(v);
     }
 
     private static Object evalUnary(Expr.UnaryExpr u, Row row) {
         Object v = eval(u.operand(), row);
         return switch (u.op()) {
-            case NOT -> !(Boolean) v;
+            case NOT -> !Boolean.TRUE.equals(v);
             case NEG -> negate(v);
         };
     }
@@ -36,11 +34,10 @@ public final class ExpressionEvaluator {
         if (v instanceof Integer i) return -i;
         if (v instanceof Long l)    return -l;
         if (v instanceof Double d)  return -d;
-        throw new IllegalStateException("Cannot negate: " + v);
+        throw new IllegalArgumentException("Cannot negate: " + v);
     }
 
     private static Object evalBinary(Expr.BinaryExpr b, Row row) {
-        // Logical operators (short-circuit)
         if (b.op() == BinaryOp.AND) {
             return evalPredicate(b.left(), row) && evalPredicate(b.right(), row);
         }
@@ -51,13 +48,12 @@ public final class ExpressionEvaluator {
         Object l = eval(b.left(), row);
         Object r = eval(b.right(), row);
 
-        // SQL semantics: any comparison involving NULL is "not true".
         boolean comparison = switch (b.op()) {
             case EQ, NEQ, LT, LTE, GT, GTE -> true;
             default -> false;
         };
         if (comparison && (l == null || r == null)) {
-            return false;   // NULL <op> anything -> false (treated as non-match)
+            return false;
         }
 
         return switch (b.op()) {
@@ -83,8 +79,7 @@ public final class ExpressionEvaluator {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private static int compare(Object a, Object b) {
-        if (isNumber(a) && isNumber(b))
-            return Double.compare(toDouble(a), toDouble(b));
+        if (isNumber(a) && isNumber(b)) return Double.compare(toDouble(a), toDouble(b));
         return ((Comparable) a).compareTo(b);
     }
 
@@ -97,7 +92,6 @@ public final class ExpressionEvaluator {
             case '/' -> x / y;
             default  -> throw new IllegalStateException();
         };
-        // keep integers integral when possible
         if (a instanceof Integer && b instanceof Integer && op != '/') return (int) result;
         return result;
     }

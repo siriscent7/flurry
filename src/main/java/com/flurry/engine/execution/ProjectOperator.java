@@ -4,7 +4,7 @@ import com.flurry.engine.plan.LogicalPlan;
 
 import java.util.List;
 
-/** Produces output rows containing only the projected expressions. */
+/** Selects/computes output columns. */
 public final class ProjectOperator implements Operator {
 
     private final List<LogicalPlan.ProjectItem> items;

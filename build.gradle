@@ -1,6 +1,7 @@
 plugins {
     id 'java'
     id 'application'
+    id 'me.champeau.jmh' version '0.7.2'
 }
 
 group = 'com.flurry'
@@ -22,3 +23,9 @@ application {
 }
 
 test { useJUnitPlatform() }
+
+jmh {
+    warmupIterations = 3
+    iterations = 5
+    fork = 1
+}

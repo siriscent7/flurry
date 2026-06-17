@@ -1,29 +1,24 @@
 package com.flurry.engine.plan;
 
 import com.flurry.engine.parser.ast.Expr;
+import com.flurry.engine.parser.ast.SelectStatement;
 
 import java.util.List;
 
-/**
- * Logical operators forming a query plan tree.
- * Sealed hierarchy: Scan (leaf) -> Filter -> Project.
- */
 public sealed interface LogicalPlan
-        permits LogicalPlan.Scan, LogicalPlan.Filter, LogicalPlan.Project {
+        permits LogicalPlan.Scan, LogicalPlan.Filter, LogicalPlan.Project,
+                LogicalPlan.Aggregate, LogicalPlan.SortLimit, LogicalPlan.Join {
 
-    /** Leaf: read a table by name. */
     record Scan(String tableName) implements LogicalPlan {
         @Override public String toString() { return "Scan(" + tableName + ")"; }
     }
 
-    /** Keep only rows where predicate is true. */
     record Filter(Expr predicate, LogicalPlan input) implements LogicalPlan {
         @Override public String toString() {
-            return "Filter(" + predicate + ")\n  " + indent(input);
+            return "Filter[" + predicate + "]\n  " + indent(input);
         }
     }
 
-    /** Project a list of output columns/expressions. */
     record Project(List<ProjectItem> items, LogicalPlan input) implements LogicalPlan {
         @Override public String toString() {
             String cols = String.join(", ", items.stream().map(Object::toString).toList());
@@ -31,10 +26,27 @@ public sealed interface LogicalPlan
         }
     }
 
-    /** One projected output: an expression with an output name. */
     record ProjectItem(Expr expr, String outputName) {
+        @Override public String toString() { return expr + " AS " + outputName; }
+    }
+
+    record Aggregate(List<Expr> groupBy,
+                     List<SelectStatement.SelectItem> items,
+                     LogicalPlan input) implements LogicalPlan {
+        @Override public String toString() { return "Aggregate\n  " + indent(input); }
+    }
+
+    record SortLimit(List<SelectStatement.OrderKey> orderBy,
+                     Integer limit,
+                     LogicalPlan input) implements LogicalPlan {
+        @Override public String toString() { return "SortLimit\n  " + indent(input); }
+    }
+
+    record Join(LogicalPlan left, LogicalPlan right,
+                Expr.ColumnRef leftKey, Expr.ColumnRef rightKey) implements LogicalPlan {
         @Override public String toString() {
-            return expr + " AS " + outputName;
+            return "HashJoin[" + leftKey + " = " + rightKey + "]\n  "
+                    + indent(left) + "\n  " + indent(right);
         }
     }
 

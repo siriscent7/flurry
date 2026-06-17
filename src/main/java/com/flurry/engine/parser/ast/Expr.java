@@ -1,13 +1,10 @@
 package com.flurry.engine.parser.ast;
 
-/**
- * Expression nodes for WHERE clauses and SELECT items.
- * Sealed so the compiler knows all variants (great for exhaustive switches later).
- */
-public sealed interface Expr
-        permits Expr.ColumnRef, Expr.Literal, Expr.BinaryExpr, Expr.UnaryExpr {
+import java.util.List;
 
-    /** A reference to a column, e.g. `age` or `users.age`. */
+public sealed interface Expr
+        permits Expr.ColumnRef, Expr.Literal, Expr.BinaryExpr, Expr.UnaryExpr, Expr.FunctionCall {
+
     record ColumnRef(String table, String column) implements Expr {
         public ColumnRef(String column) { this(null, column); }
         @Override public String toString() {
@@ -15,7 +12,6 @@ public sealed interface Expr
         }
     }
 
-    /** A constant literal: integer, double, string, boolean, or null. */
     record Literal(Object value, LiteralType type) implements Expr {
         public enum LiteralType { INTEGER, DOUBLE, STRING, BOOLEAN, NULL }
         @Override public String toString() {
@@ -23,17 +19,22 @@ public sealed interface Expr
         }
     }
 
-    /** A binary operation, e.g. `age >= 30` or `a AND b`. */
     record BinaryExpr(BinaryOp op, Expr left, Expr right) implements Expr {
         @Override public String toString() {
             return "(" + left + " " + op.symbol() + " " + right + ")";
         }
     }
 
-    /** A unary operation, e.g. `NOT active` or `-price`. */
     record UnaryExpr(UnaryOp op, Expr operand) implements Expr {
         @Override public String toString() {
             return "(" + op.symbol() + " " + operand + ")";
+        }
+    }
+
+    /** Aggregate function call, e.g. COUNT(*), SUM(age). isStar=true for COUNT(*). */
+    record FunctionCall(String name, List<Expr> args, boolean isStar) implements Expr {
+        @Override public String toString() {
+            return name + "(" + (isStar ? "*" : String.join(", ", args.stream().map(Object::toString).toList())) + ")";
         }
     }
 }

@@ -1,0 +1,5 @@
+id,name,age,city,active
+1,Alice,30,San Jose,true
+2,Bob,25,Seattle,true
+3,Carol,,Austin,false
+4,Dave,40,San Jose,true

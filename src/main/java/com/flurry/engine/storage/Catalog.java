@@ -18,4 +18,8 @@ public final class Catalog {
         return lookup(name).orElseThrow(
             () -> new IllegalArgumentException("Table not found: " + name));
     }
+
+    public java.util.Set<String> tableNames() {
+        return tables.keySet();
+    }
 }

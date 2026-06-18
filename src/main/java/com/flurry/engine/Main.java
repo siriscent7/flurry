@@ -57,6 +57,18 @@ public class Main {
                 int rows = Integer.parseInt(args[1]);
                 com.flurry.engine.util.DataGen.generate(rows, Path.of(args[2]));
             }
+            case "shell" -> {
+                // flurry shell <t1> <csv1> [<t2> <csv2> ...]
+                if (args.length < 3 || (args.length - 1) % 2 != 0) {
+                    System.out.println("Usage: flurry shell <t1> <csv1> [<t2> <csv2> ...]");
+                    return;
+                }
+                Shell shell = new Shell();
+                for (int i = 1; i + 1 < args.length; i += 2) {
+                    shell.loadTable(args[i], Path.of(args[i + 1]));
+                }
+                shell.run();
+            }
             default -> {
                 if (args.length < 2) { usage(); return; }
                 Catalog catalog = new Catalog();
@@ -121,13 +133,14 @@ public class Main {
     private static void usage() {
         System.out.println("""
             Usage:
-              flurry lex     "<sql>"                          tokenize SQL
-              flurry parse   "<sql>"                          parse SQL into an AST
-              flurry query   <table> <csv> "<sql>"            run a query against one CSV
-              flurry query2  <t1> <csv1> <t2> <csv2> "<sql>"  run a join query across two CSVs
-              flurry explain <table> <csv> "<sql>"            show plan before/after optimization
-              flurry gen <rows> <out>                         generate a benchmark CSV
-              flurry <table> <csv>                            load a CSV and print column stats
+            flurry shell   <t1> <csv1> [<t2> <csv2> ...]    interactive SQL shell
+            flurry lex     "<sql>"                          tokenize SQL
+            flurry parse   "<sql>"                          parse SQL into an AST
+            flurry query   <table> <csv> "<sql>"            run a query against one CSV
+            flurry query2  <t1> <csv1> <t2> <csv2> "<sql>"  run a join query across two CSVs
+            flurry explain <table> <csv> "<sql>"            show plan before/after optimization
+            flurry gen <rows> <out>                         generate a benchmark CSV
+            flurry <table> <csv>                            load a CSV and print column stats
             """);
     }
 }

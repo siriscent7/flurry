@@ -3,3 +3,4 @@ build/
 *.class
 .DS_Store
 .vscode/
+data/big.csv

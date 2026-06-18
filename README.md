@@ -1,10 +1,11 @@
 # Flurry — A Columnar SQL Query Engine in Java
 
-**Flurry** is an analytical SQL query engine built from scratch in **Java 17**. It implements the full query-compilation pipeline — lexing, parsing, logical planning, rule-based optimization, and **morsel-driven parallel execution** — over a **columnar storage** layer. It supports filters, joins, aggregations, sorting, and a plan optimizer, and achieves a measured **2.9× speedup** through multi-threaded execution.
+**Flurry** is an analytical SQL query engine built from scratch in **Java 17**. It implements the complete query-compilation pipeline — lexing, parsing, logical planning, rule-based optimization, and **morsel-driven parallel execution** — over a **columnar storage** layer. It supports filters, joins, aggregations, sorting, and a plan optimizer, ships with an interactive SQL shell, and achieves a measured **2.9× speedup** through multi-threaded execution.
 
 ## Motivation
 
 Modern analytical warehouses (Snowflake, BigQuery, Redshift) get their speed from principles that everyday database *use* never exposes:
+
 - **Columnar storage** — read only the columns a query touches.
 - **Query compilation & optimization** — turn declarative SQL into an optimized physical plan.
 - **Parallel execution** — split a single query across CPU cores.
@@ -19,6 +20,7 @@ Flurry rebuilds this machinery from the ground up — a hand-written lexer/parse
 - **Rule-based optimizer** — constant folding and predicate pushdown, with an `EXPLAIN` command showing before/after plans.
 - **HashJoin** — build/probe equi-join for multi-table queries.
 - **Morsel-driven parallel execution** — intra-operator parallelism over a shared thread pool, **benchmarked at 2.9× over single-threaded** (JMH).
+- **Interactive SQL shell** — a REPL with pretty-printed tables, query timing, and `EXPLAIN`.
 - **SQL-correct null semantics** — nulls excluded from aggregates, treated as non-matching in comparisons.
 
 ## Architecture
@@ -93,7 +95,7 @@ flowchart TD
     J --> K[Result rows streamed to client]
 ```
 
-### Join Query Flow (multi-table, HashJoin)
+### Join Query (HashJoin)
 
 ```mermaid
 flowchart TD
@@ -114,7 +116,7 @@ flowchart TD
     F --> G[Result rows to client]
 ```
 
-### Parallel Execution Flow (morsel-driven)
+### Parallel Execution (morsel-driven)
 
 ```mermaid
 flowchart TD
@@ -147,25 +149,39 @@ Benchmarked with **JMH** on a 2,000,000-row scan + filter
 
 The speedup is bounded by allocation/GC pressure (boxed values + per-row map construction) rather than CPU — which is precisely why production engines use primitive columnar vectors and batch-at-a-time execution.
 
+## Interactive Shell
+
+```
+$ flurry shell users data/users.csv orders data/orders.csv
+
+flurry> SELECT city, COUNT(*) AS n FROM users GROUP BY city;
+
++----------+---+
+| city     | n |
++----------+---+
+| San Jose | 2 |
+| Seattle  | 1 |
+| Austin   | 1 |
++----------+---+
+3 rows (4 ms)
+
+flurry> EXPLAIN SELECT name FROM users WHERE age > 20 + 10;
+
+=== Logical Plan (optimized) ===
+Project([name AS name])
+  Filter[(age > 30)]
+    Scan(users)
+(planned in 1 ms)
+```
+
 ## SQL Examples
 
 ```sql
--- Filtering + projection
 SELECT name, age FROM users WHERE age >= 30 AND city = 'San Jose';
-
--- Aggregation + GROUP BY
 SELECT city, COUNT(*) AS n, AVG(age) AS avg_age FROM users GROUP BY city;
-
--- Sorting + limit
 SELECT name, age FROM users ORDER BY age DESC LIMIT 2;
-
--- Multi-table hash join
 SELECT name, amount FROM users JOIN orders ON id = user_id;
-
--- Join + aggregate
-SELECT name, SUM(amount) AS total
-FROM users JOIN orders ON id = user_id
-GROUP BY name;
+SELECT name, SUM(amount) AS total FROM users JOIN orders ON id = user_id GROUP BY name;
 ```
 
 ## Project Structure
@@ -173,6 +189,7 @@ GROUP BY name;
 ```
 src/main/java/com/flurry/engine/
 ├── Main.java                    # CLI entry point
+├── Shell.java                   # Interactive SQL shell
 ├── storage/                     # Columnar storage
 │   ├── ColumnVector.java, Table.java, Schema.java
 │   ├── Catalog.java, CsvLoader.java
@@ -193,24 +210,19 @@ src/main/java/com/flurry/engine/
 │   ├── ScanOperator.java, FilterOperator.java, ProjectOperator.java
 │   ├── AggregateOperator.java, Aggregator.java
 │   ├── SortLimitOperator.java, HashJoinOperator.java
-│   ├── ExpressionEvaluator.java
+│   ├── ExpressionEvaluator.java, TablePrinter.java
 │   └── ParallelExecutor.java    # Morsel-driven parallel execution
 └── util/DataGen.java            # Benchmark data generator
 
-src/jmh/java/com/flurry/engine/bench/
-└── ScanFilterBenchmark.java     # JMH single vs parallel benchmark
-
-src/test/java/com/flurry/engine/
-├── storage/ColumnVectorTest.java
-├── parser/LexerTest.java, ParserTest.java
-└── execution/ExecutionTest.java
+src/jmh/java/com/flurry/engine/bench/ScanFilterBenchmark.java
+src/test/java/com/flurry/engine/...
 ```
 
 ## Build & Run
 
 ### Prerequisites
 - Java 17+ (developed on JDK 23)
-- Gradle (wrapper included — use `./gradlew`)
+- Gradle wrapper included (`./gradlew`)
 
 ### Commands
 ```bash
@@ -218,20 +230,16 @@ src/test/java/com/flurry/engine/
 ./gradlew build
 ./gradlew test
 
-# Tokenize / parse
-./gradlew run --args='lex "SELECT name FROM users WHERE age > 30"'
-./gradlew run --args='parse "SELECT name FROM users WHERE age > 30"'
+# Interactive shell (recommended)
+./gradlew installDist
+./build/install/flurry/bin/flurry shell users data/users.csv orders data/orders.csv
 
-# Run a query against a CSV
+# One-shot queries
 ./gradlew run --args='query users data/users.csv "SELECT city, COUNT(*) AS n FROM users GROUP BY city"'
-
-# Multi-table join
 ./gradlew run --args='query2 users data/users.csv orders data/orders.csv "SELECT name, amount FROM users JOIN orders ON id = user_id"'
-
-# Show optimizer before/after
 ./gradlew run --args='explain users data/users.csv "SELECT name FROM users WHERE age > 20 + 10"'
 
-# Generate benchmark data + run JMH
+# Benchmark
 ./gradlew run --args='gen 2000000 data/big.csv'
 ./gradlew jmh
 ```
@@ -246,7 +254,7 @@ src/test/java/com/flurry/engine/
 
 **Rule-based optimization** — Predicate pushdown filters rows *before* joins; constant folding evaluates literals once at plan time instead of per row.
 
-**Sealed types for the AST and plan** — The compiler enforces exhaustive handling of every node variant, eliminating a whole class of bugs.
+**Sealed types for the AST and plan** — The compiler enforces exhaustive handling of every node variant, eliminating a class of bugs.
 
 ## Roadmap
 - Vectorized (batch-at-a-time) execution with primitive column vectors

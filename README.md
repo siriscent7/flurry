@@ -2,7 +2,7 @@
 
 **Flurry** is an analytical SQL query engine built from scratch in **Java 17**. It implements the complete query-compilation pipeline — lexing, parsing, logical planning, rule-based optimization, and **morsel-driven parallel execution** — over a **columnar storage** layer. It supports filters, joins, aggregations, sorting, and a plan optimizer, ships with an interactive SQL shell, and achieves a measured **2.9× speedup** through multi-threaded execution.
 
-> 💡 **Built on top of Flurry:** Check out **[FlurryPilot](https://github.com/siriscen7/flurrypilot)**, an autonomous SQL query agent I built to interact with the engine using natural-language queries.
+> 💡 **Built on top of Flurry:** Check out **[FlurryPilot](https://github.com/siriscent7/flurrypilot)**, an autonomous SQL query agent I built to interact with the engine using natural-language queries.
 
 ## Motivation
 
